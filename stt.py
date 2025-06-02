@@ -5,18 +5,22 @@ import threading
 import numpy as np
 import sounddevice as sd
 import torch
+import argparse
 from datetime import datetime
-from flask import Flask, jsonify, request
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from resemblyzer import VoiceEncoder, preprocess_wav
 from scipy.spatial.distance import cosine
+from collections import deque
+from sklearn.cluster import DBSCAN
 from faster_whisper import WhisperModel
 from scipy.io.wavfile import write
 import io
 import pickle
 import time
 from concurrent.futures import ThreadPoolExecutor
-from flask_cors import CORS
-from collections import deque
+import uvicorn
+import psutil
 
 # === CONFIG ===
 transcript_dir = "D:/Data_Files/Transcripts"
@@ -25,11 +29,31 @@ timestamp_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 speaker_transcript_path = os.path.join(transcript_dir, f"with_speakers_{timestamp_str}.txt")
 plain_transcript_path = os.path.join(transcript_dir, f"plain_{timestamp_str}.txt")
 
-device = None
+# === AUTO-SELECT OR MANUAL MIC DEVICE SELECTION ===
+parser = argparse.ArgumentParser()
+parser.add_argument("--device", type=int, default=None, help="Specify audio input device ID")
+args = parser.parse_args()
+
+device = args.device
+if device is None:
+    try:
+        devices = sd.query_devices()
+        for idx, d in enumerate(devices):
+            if d['max_input_channels'] >= 1:
+                print(f"[🎤 Found input device] ID {idx}: {d['name']}")
+                device = idx
+                break
+        if device is None:
+            raise RuntimeError("No suitable input device with 1+ channels.")
+    except Exception as e:
+        print(f"[❌ Audio Device Error] {e}")
+        device = None
+
 samplerate = 16000
 blocksize = 16000
 speaker_threshold = 0.55
-MAX_TRANSCRIPT_LINES = 1000
+MAX_TRANSCRIPT_LINES = 10000
+MAX_SPEAKERS = 4  # Limiting number of recognized speakers
 
 # === MODELS ===
 device_type = "cuda" if torch.cuda.is_available() else "cpu"
@@ -53,70 +77,16 @@ transcript_lines_plain = deque(maxlen=MAX_TRANSCRIPT_LINES)
 transcript_lock = threading.Lock()
 write_buffer = []
 executor = ThreadPoolExecutor(max_workers=2)
+latency_data = deque(maxlen=100)
 
-# === AUDIO PROCESSING ===
+# === AUDIO CALLBACK ===
 def callback(indata, frames, time, status):
     if status:
         print("[⚠️ Audio Status]", status, file=sys.stderr)
     q.put(bytes(indata))
 
-def identify_speaker(audio_frames):
-    wav = preprocess_wav(np.concatenate(audio_frames), source_sr=samplerate)
-    if np.mean(np.abs(wav)) < 0.01:
-        return "Unknown"
-    embedding = encoder.embed_utterance(wav)
-    min_dist = float('inf')
-    identity = "Unknown"
-
-    for name, ref_embedding in known_speakers.items():
-        dist = cosine(embedding, ref_embedding)
-        if dist < speaker_threshold and dist < min_dist:
-            min_dist = dist
-            identity = name
-
-    recent_predictions.append(identity)
-    if recent_predictions[-2:] == ["Unknown", "Unknown"]:
-        new_id = f"Speaker_{len(known_speakers) + 1}"
-        known_speakers[new_id] = embedding
-        identity = new_id
-        recent_predictions.clear()
-        with open("known_speakers.pkl", "wb") as f:
-            pickle.dump(known_speakers, f)
-
-    if identity != "Unknown":
-        recent_predictions.clear()
-
-    return identity
-
-def log_transcript(speaker, text):
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    line_with_speaker = f"[{timestamp}] {speaker}: {text}"
-    line_plain = f"[{timestamp}] {text}"
-    with transcript_lock:
-        transcript_lines_speaker.append(line_with_speaker)
-        transcript_lines_plain.append(line_plain)
-        write_buffer.append((line_with_speaker, line_plain))
-    print(line_with_speaker)
-
-def process_chunk(audio_frames):
-    full_chunk = np.concatenate(audio_frames)
-    if np.mean(np.abs(full_chunk)) < 0.01:
-        return
-
-    wav_io = io.BytesIO()
-    write(wav_io, samplerate, (full_chunk * 32767).astype(np.int16))
-    wav_io.seek(0)
-
-    segments, _ = whisper_model.transcribe(
-        wav_io,
-        vad_filter=True,
-        vad_parameters={"threshold": 0.6, "min_silence_duration_ms": 300}
-    )
-    for segment in segments:
-        text = segment.text.strip()
-        if text and len(text.split()) >= 5 and segment.avg_logprob > -0.5:
-            speaker = identify_speaker(audio_frames)
-            log_transcript(speaker, text)
+# === SPEAKER EMBEDDING HISTORY ===
+speaker_embedding_history = deque(maxlen=20)  # Rolling storage for improved clustering
 
 def audio_thread():
     buffer = []
@@ -130,13 +100,13 @@ def audio_thread():
                     audio_np = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
                     buffer.append(audio_np)
 
-                    if len(buffer) >= 6:
-                        executor.submit(process_chunk, buffer[-6:])
-                        buffer = buffer[-2:]
+                    if len(buffer) >= 3:
+                        executor.submit(process_chunk, buffer[-3:])
+                        buffer = buffer[-1:]
         except Exception as e:
-            print(f"[❌ Audio Thread Error] {e}")
+            print(f"[❌ Audio Thread Error] {e} on device={device}")
             time.sleep(3)
-
+            
 def periodic_writer():
     while True:
         try:
@@ -152,57 +122,123 @@ def periodic_writer():
         except Exception as e:
             print(f"[❌ Writer Thread Error] {e}")
 
+def performance_monitor():
+    while True:
+        cpu = psutil.cpu_percent(interval=5)
+        mem = psutil.virtual_memory().percent
+        print(f"[📊 Performance] CPU: {cpu:.1f}% | Memory: {mem:.1f}%")
+
+def cluster_speakers():
+    """Clusters speaker embeddings to dynamically differentiate voices, limiting to MAX_SPEAKERS."""
+    if len(speaker_embedding_history) < 5:
+        return None
+
+    embeddings = np.array(speaker_embedding_history)
+    clustering_model = DBSCAN(eps=0.4, min_samples=5, metric="euclidean")
+    labels = clustering_model.fit_predict(embeddings)
+
+    unique_speakers = set(labels)
+    if len(unique_speakers) > MAX_SPEAKERS:
+        return "Unknown"  # Defaulting extra speakers beyond limit
+
+    return labels[-1] if labels[-1] >= 0 else "Unknown"
+
+def identify_speaker(audio_frames):
+    """Identifies speakers using adaptive clustering, ensuring a maximum of 4 speakers."""
+    
+    wav = preprocess_wav(np.concatenate(audio_frames), source_sr=samplerate)
+
+    if np.mean(np.abs(wav)) < 0.01:  # Ignore silence
+        return "Unknown"
+
+    embedding = encoder.embed_utterance(wav)
+    speaker_embedding_history.append(embedding)
+
+    # Apply clustering
+    speaker_label = cluster_speakers()
+    if speaker_label and speaker_label != "Unknown":
+        identity = f"Speaker_{speaker_label + 1}"
+        if identity not in known_speakers and len(known_speakers) < MAX_SPEAKERS:
+            known_speakers[identity] = embedding
+    else:
+        identity = "Unknown"
+
+    return identity
+
+def log_transcript(speaker, text):
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    line_with_speaker = f"[{timestamp}] {speaker}: {text}"
+    line_plain = f"{text}"
+
+    print(line_with_speaker)
+
+    with transcript_lock:
+        transcript_lines_speaker.append(line_with_speaker)
+        transcript_lines_plain.append(line_plain)
+        write_buffer.append((line_with_speaker, line_plain))
+
+def process_chunk(audio_frames):
+    start = time.time()
+    print("[🧠 Processing audio chunk...]")
+    
+    full_chunk = np.concatenate(audio_frames)
+    if np.mean(np.abs(full_chunk)) < 0.01:
+        print("[🔇 Silence skipped]")
+        return
+
+    wav_io = io.BytesIO()
+    write(wav_io, samplerate, (full_chunk * 32767).astype(np.int16))
+    wav_io.seek(0)
+
+    retries = 2
+    for attempt in range(retries):
+        try:
+            segments, _ = whisper_model.transcribe(
+                wav_io, vad_filter=True, vad_parameters={"threshold": 0.6, "min_silence_duration_ms": 300}
+            )
+            print("[🔍 Raw Whisper Output]:", segments)
+
+            for segment in segments:
+                text = segment.text.strip()
+                if text:
+                    speaker = identify_speaker(audio_frames)
+                    log_transcript(speaker, text)
+            break
+        except Exception as e:
+            if attempt < retries - 1:
+                print(f"[❌ Whisper Error] Retrying... ({e})")
+                time.sleep(1)
+            else:
+                print(f"[❌ Whisper Failed After {retries} Attempts]: {e}")
+
+    end = time.time()
+    latency_data.append(end - start)
+
+# === BACKGROUND THREADS ===
 def start_background_tasks():
     threading.Thread(target=audio_thread, daemon=True).start()
     threading.Thread(target=periodic_writer, daemon=True).start()
+    threading.Thread(target=performance_monitor, daemon=True).start()
 
-# === FLASK SERVER ===
-app = Flask(__name__)
-CORS(app)
+# === FASTAPI ===
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
+)
 
-@app.route("/transcript")
-def get_transcript():
-    mode = request.args.get("mode", "plain")
+@app.get("/transcript")
+async def get_transcript(mode: str = "plain"):
     with transcript_lock:
-        if mode == "plain":
-            return jsonify(list(transcript_lines_plain))
-        elif mode == "speaker":
-            return jsonify(list(transcript_lines_speaker))
-        else:
-            return jsonify([])
+        return list(transcript_lines_plain) if mode == "plain" else list(transcript_lines_speaker)
 
-@app.route("/status")
-def status():
+@app.get("/status")
+async def status():
     with transcript_lock:
-        return jsonify({
-            "known_speakers": list(known_speakers.keys()),
-            "total_lines_speaker": len(transcript_lines_speaker),
-            "total_lines_plain": len(transcript_lines_plain),
-            "write_buffer_size": len(write_buffer),
-            "queue_size": q.qsize(),
-            "active_threads": threading.active_count()
-        })
+        return {"known_speakers": list(known_speakers.keys()), "total_lines": len(transcript_lines_speaker)}
 
-@app.route("/")
-def index():
-    return jsonify({"message": "API is running. Use /transcript and /status endpoints."})
-
-def run_flask_server():
-    app.run(debug=False, host="0.0.0.0", port=9575, use_reloader=False)
-
-# === ENTRY POINT ===
 if __name__ == "__main__":
-    mode = os.environ.get("RUN_MODE", "standalone").lower()
-
-    print(f"🔧 Running in {mode.upper()} mode...")
-
+    print(f"🎧 Using device: {device} | Torch device: {device_type}")
+    print(f"📁 Transcripts will be saved to: {transcript_dir}")
+    print("🚀 FastAPI server running at http://localhost:9575")
     start_background_tasks()
-
-    if mode == "server":
-        run_flask_server()
-    else:
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("\n👋 Exiting on Ctrl+C.")
+    uvicorn.run(app, host="0.0.0.0", port=9575, log_level="info")
