@@ -1,82 +1,160 @@
-# Oi Voice Assistant
+# Oi Voice Assistant 🎧🧠🗣️
 
-## Overview
-
-The **Oi Voice Assistant** is a fully integrated, modular AI system built for real-time, speech-based interaction. It combines Speech-to-Text (STT), Language Modeling (LLM), and Text-to-Speech (TTS) technologies to deliver emotionally intelligent, context-aware conversations. Designed for use in smart assistants, customer service bots, and NLP research, this suite leverages multi-threading and GPU-accelerated models for high performance.
-
-The assistant is composed of four primary modules:
-
-1. **Speech-to-Text (STT)** – Transcribes speech in real-time and detects unique speakers.
-2. **Text Generation (LLM)** – Generates intelligent, emotional context-aware responses using Mistral-7B-Instruct.
-3. **Text-to-Speech (TTS)** – Synthesizes high-quality speech from AI responses using Jenny TTS.
-4. **Controller** – Manages subprocesses, synchronizes components, and handles runtime stability.
+Oi is a full-stack, modular voice-enabled AI assistant system combining real-time **Speech-to-Text**, **Text Generation**, and **Text-to-Speech**. Built for voice-first interfaces, it also features a modern **React frontend** for chat visualization and input. Designed for natural voice interactions, it features real-time processing, voice activity detection, speaker recognition, emotion detection, and conversational memory.
 
 ---
 
-## Features
+## 🌟 Features
 
-### 🔊 Speech-to-Text (STT)
+### Backend (Voice Assistant Engine)
 
-* Real-time transcription using **FasterWhisper**.
-* **Speaker Identification** using **Resemblyzer** voice embeddings.
-* Multithreaded audio stream processing with `sounddevice`.
-* Persistent transcript logging with optional API exposure.
+* 🔊 **Speech-to-Text** with Whisper + Resemblyzer (Speaker Recognition)
+* 🧠 **Text Generation** using Mistral-7B with Emotion Detection
+* 🗣️ **Text-to-Speech** using Jenny TTS with audio playback
+* 📋 Transcript Logging and Conversation Memory
+* 🔄 RESTful APIs for all modules
+* 🌿 Emotion-adaptive tone (e.g., supportive if sadness is detected)
+* ⏱️ Multithreaded audio and model execution
+* 🚀 Real-time voice activity detection
 
-### 🧠 Text Generation (LLM)
+### Frontend (Chat UI)
 
-* Context-aware responses using **Mistral-7B-Instruct** via **llama-cpp**.
-* Emotion detection via **GoEmotions** BERT-based classifier.
-* Response tone adapts to detected emotions (e.g., supportive if sadness is detected).
-* Built on **FastAPI** with async support and concurrency.
-* Conversation memory using `deque` to maintain history.
-
-### 🎧 Text-to-Speech (TTS)
-
-* Voice synthesis using **Jenny TTS** (`coqui.ai`).
-* Cleaned, emotion-filtered responses passed to the TTS engine.
-* Non-blocking audio playback using `sounddevice`.
-* Adjustable sample rate for audio fidelity.
-
-### 🔗 Controller Module
-
-* Centralized startup and monitoring of STT, LLM, and TTS modules.
-* Uses Python subprocess and environment isolation.
-* Logs output and manages crash recovery.
-* Toggling between voice and text mode supported via API.
-
- ### 💻 Web Frontend
-Built with Vite + Tailwind CSS for fast performance
-
-Responsive design for real-time user input and output
-
-Connects to backend /respond API for conversational flow
-
-Displays AI replies and logs them in the interface
+* 🖥️ **React-based Chat Interface**
+* 💬 Typing & Voice input toggling
+* 🎙️ Speech-to-text integration (planned)
+* ⚡ Fast and responsive design
+* 🧪 Mock and real backend support
 
 ---
 
-## Installation
+## 🏗️ Folder Structure
 
-### 1. Prerequisites
-
-* Python 3.8 or higher
-* (Optional) GPU support for better performance
-
-### 2. Dependency Installation
-
-```bash
-pip install -r requirements.txt
+```
+Oi-Chatbot/
+├── src/
+│   ├── Speech_to_text/        # Whisper + Resemblyzer
+│   │   ├── api.py
+│   │   ├── audio.py
+│   │   ├── models.py
+│   │   ├── speaker.py
+│   │   ├── stt.py
+│   │   ├── transcript.py
+│   │   └── utils.py
+│   ├── Text_GEN/              # Mistral + GoEmotions
+│   │   ├── data/
+│   │   ├── modules/
+│   │   ├── transcripts/
+│   │   └── text_gen.py
+│   └── Text_To_Speech/        # Jenny TTS
+│       └── tts.py
+├── Mistral/                   # Model files
+├── Transcripts/               # Transcripts
+├── Requirements.txt           # Main dependencies
+├── stt.py                     # STT entry point
+├── assistant_controller.py    # Process orchestrator
+├── frontend/
+│   ├── public/
+│   └── src/
+│       ├── api/
+│       ├── components/
+│       ├── assets/
+│       ├── App.jsx
+│       └── index.js
+└── README.md
 ```
 
-### 3. Model Setup
+---
 
-* Place **Mistral-7B-Instruct GGUF model** in the correct directory.
-* Ensure **Whisper**, **Jenny TTS**, and **Resemblyzer** are installed and working.
-* Internet connection required to fetch emotion labels for GoEmotions.
+## 🔧 Installation & Setup
 
-### 4. Configuration
+### 1️⃣ Backend Setup
 
-Update paths in `assistant_controller.py`:
+#### Prerequisites
+
+* Python 3.8+
+* (Recommended) CUDA-capable GPU
+* Three Virtual Environments (main, text\_gen, tts)
+
+#### Install Main Backend Dependencies
+
+```bash
+pip install -r Requirements.txt
+```
+
+#### Text Generation venv Setup
+
+```bash
+cd src/Text_GEN
+python -m venv venv2
+source venv2/bin/activate
+pip install -r Requirements2.txt
+```
+
+#### Text-to-Speech venv Setup
+
+```bash
+cd src/Text_To_Speech
+python -m venv venv
+source venv/bin/activate
+pip install TTS
+```
+
+#### Model Setup
+
+* Place Mistral-7B GGUF model in `Mistral/`
+* Ensure Whisper and Resemblyzer models are available
+* Internet required to fetch GoEmotions labels
+
+---
+
+## 🔠 Frontend Setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend will start at [http://localhost:5173](http://localhost:5173)
+
+Update `src/api/openai.js` with:
+
+```js
+export async function sendChatMessage(messages) {
+  const res = await fetch("http://localhost:8989/respond", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ input: messages[messages.length - 1].content })
+  });
+  const data = await res.json();
+  return data.response;
+}
+```
+
+---
+
+## 🚀 Running the System
+
+### Option A: Individual Modules
+
+```bash
+# TTS
+python src/Text_To_Speech/tts.py
+# STT
+python stt.py
+# Text Gen
+python src/Text_GEN/text_gen.py
+# Frontend
+npm run dev
+```
+
+### Option B: Controller
+
+```bash
+python assistant_controller.py
+```
+
+Update the paths in `assistant_controller.py`:
 
 ```python
 STT_ENV = "path_to_stt_venv/bin/python"
@@ -86,57 +164,68 @@ TTS_ENV = "path_to_tts_venv/bin/python"
 
 ---
 
-## Usage
+## 📡 API Endpoints
 
-### 🚀 Running the Full Suite
+| Endpoint                       | Description                                    |
+| ------------------------------ | ---------------------------------------------- |
+| `POST /respond`                | Generate AI response from text or spoken input |
+| `POST /tts?text=Hello`         | Convert text to speech (Jenny TTS)             |
+| `POST /chat?text=Hello`        | Respond and speak                              |
+| `GET /transcript?mode=plain`   | Raw transcript log                             |
+| `GET /transcript?mode=speaker` | Speaker-attributed transcript                  |
+| `/toggle_mode`                 | Toggle between voice/text mode                 |
+
+---
+
+## 🧰 Technologies Used
+
+* **Backend**: Python, FastAPI, Flask, Torch, Transformers
+* **Speech**: Faster Whisper, Resemblyzer, SoundDevice
+* **LLM**: llama-cpp, Mistral 7B Instruct
+* **Emotion**: GoEmotions (BERT-based classifier)
+* **Frontend**: React.js, Vite, TailwindCSS
+
+---
+
+## 🚪 Usage Examples
 
 ```bash
-python assistant_controller.py
+# Basic TTS
+curl -X POST 'http://localhost:6969/tts?text=Hello%20world!'
+
+# Chat with TTS
+curl -X POST 'http://localhost:6969/chat?text=How%20are%20you?'
 ```
 
-This initializes:
+---
 
-* STT (real-time voice transcription)
-* LLM (response generation)
-* TTS (voice synthesis)
-* Controller (synchronization)
+## 🔧 Troubleshooting
 
-### 📡 API Endpoints (via FastAPI)
-
-| Endpoint                   | Description                                         |
-| -------------------------- | --------------------------------------------------- |
-| `/respond`                 | Generate AI response from text or last spoken input |
-| `/toggle_mode`             | Toggle between voice and text input modes           |
-| `/transcript?mode=plain`   | Get raw transcripts                                 |
-| `/transcript?mode=speaker` | Get transcripts with speaker attribution            |
-| `/`                        | Confirm server status                               |
+* **Audio Issues**: Check microphone, sounddevice, audio config
+* **Model Loading**: Ensure correct model paths, enough RAM/GPU
+* **API Errors**: Verify ports and endpoints match
 
 ---
 
-## Technologies Used
+## 💪 Contributing
 
-* **Python 3.8+**
-* **FastAPI** (API backend)
-* **Torch, Transformers** (emotion classification)
-* **llama-cpp-python** (Mistral LLM)
-* **Jenny TTS** (TTS synthesis)
-* **FasterWhisper** (real-time STT)
-* **Resemblyzer** (speaker identification)
-* **NumPy**, **SoundDevice** (audio handling)
-* **Concurrent.futures**, **Threading**, **Subprocess** (parallel execution)
+* Fork, clone, and PR your improvements
+* Open GitHub issues for bugs and features
+* Improve frontend integration or backend performance
 
 ---
 
-## Contributing
+## 📄 License
 
-We welcome contributions:
-
-* Fork the repository and submit PRs for features or bug fixes.
-* Report bugs or suggest enhancements via GitHub Issues.
-* Help optimize model integration or extend functionality.
+MIT License
 
 ---
 
-## License
+## 🙏 Credits
 
-This project is licensed under the **MIT License**. See the `LICENSE` file for details.
+* Mistral AI
+* Coqui TTS (Jenny Model)
+* Hugging Face
+* Faster Whisper
+* Resemblyzer
+* Google GoEmotions
