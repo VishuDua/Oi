@@ -1,7 +1,4 @@
 # Oi Voice Assistant 🎧🧠🗣️
-
-Oi is a full-stack, modular voice-enabled AI assistant system combining real-time **Speech-to-Text**, **Text Generation**, and **Text-to-Speech**. Built for voice-first interfaces, it also features a modern **React frontend** for chat visualization and input. Designed for natural voice interactions, it features real-time processing, voice activity detection, speaker recognition, emotion detection, and conversational memory.
-
 ---
 
 ## 🌟 Features
