@@ -44,6 +44,15 @@ The assistant is composed of four primary modules:
 * Logs output and manages crash recovery.
 * Toggling between voice and text mode supported via API.
 
+ ### 💻 Web Frontend
+Built with Vite + Tailwind CSS for fast performance
+
+Responsive design for real-time user input and output
+
+Connects to backend /respond API for conversational flow
+
+Displays AI replies and logs them in the interface
+
 ---
 
 ## Installation
