@@ -218,7 +218,7 @@ MIT License
 
 ---
 
-## 🙏 Credits
+## Credits
 
 * Mistral AI
 * Coqui TTS (Jenny Model)
