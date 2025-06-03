@@ -1,92 +1,133 @@
-Oi Voice Assistant
+# Oi Voice Assistant
 
-Overview
-The AI Conversational Assistant Suite is a fully integrated, modular system designed for real-time speech interaction and intelligent responses. It combines Speech-to-Text (STT), Text Generation (LLM), and Text-to-Speech (TTS) to deliver seamless AI-driven conversations with emotion-aware contextual replies.
-The suite is structured around four key components:
-- Speech-to-Text (STT) – Captures and transcribes voice input, identifying speakers dynamically.
-- Text Generation (LLM) – Processes user queries and generates intelligent responses using Mistral-7B-Instruct.
-- Text-to-Speech (TTS) – Converts AI-generated text responses into high-quality synthesized speech using Jenny TTS.
-- Controller Module – Oversees and synchronizes all processes for efficient execution.
-This project is ideal for virtual assistants, AI-powered customer service, and research in natural language processing and emotional AI.
+## Overview
 
-Features
-🔊 Speech-to-Text (STT)
-- Speaker Identification using voice embeddings with Resemblyzer.
-- Real-time transcription leveraging Whisper AI for high accuracy.
-- Multi-threaded audio processing for optimized performance.
-- Automatic data logging for structured transcript management.
-🧠 Text Generation (LLM)
-- Context-aware responses powered by Mistral-7B-Instruct.
-- Emotion detection using GoEmotions BERT model to adjust AI tone dynamically.
-- Flask-based API to handle user requests efficiently.
-- Interactive conversation memory for better engagement.
-🎧 Text-to-Speech (TTS)
-- Natural voice synthesis using Jenny TTS for fluid AI speech generation.
-- Optimized text cleanup to remove unnecessary characters for TTS readability.
-- Customizable sample rate for high-quality audio playback.
-- Threaded audio streaming for minimal latency in speech response.
-🔗 Controller Module
-- Process management for launching STT, LLM, and TTS seamlessly.
-- Subprocess monitoring to track real-time output.
-- Error handling mechanisms ensuring stability and recovery from failures.
-- Virtual environment support for modular execution.
+The **Oi Voice Assistant** is a fully integrated, modular AI system built for real-time, speech-based interaction. It combines Speech-to-Text (STT), Language Modeling (LLM), and Text-to-Speech (TTS) technologies to deliver emotionally intelligent, context-aware conversations. Designed for use in smart assistants, customer service bots, and NLP research, this suite leverages multi-threading and GPU-accelerated models for high performance.
 
-Installation
-1️⃣ Prerequisites
-Ensure you have Python installed (>=3.8) and that your system supports GPU-based execution (optional but recommended for faster processing).
-2️⃣ Dependency Installation
-Install all required dependencies using:
+The assistant is composed of four primary modules:
+
+1. **Speech-to-Text (STT)** – Transcribes speech in real-time and detects unique speakers.
+2. **Text Generation (LLM)** – Generates intelligent, emotional context-aware responses using Mistral-7B-Instruct.
+3. **Text-to-Speech (TTS)** – Synthesizes high-quality speech from AI responses using Jenny TTS.
+4. **Controller** – Manages subprocesses, synchronizes components, and handles runtime stability.
+
+---
+
+## Features
+
+### 🔊 Speech-to-Text (STT)
+
+* Real-time transcription using **FasterWhisper**.
+* **Speaker Identification** using **Resemblyzer** voice embeddings.
+* Multithreaded audio stream processing with `sounddevice`.
+* Persistent transcript logging with optional API exposure.
+
+### 🧠 Text Generation (LLM)
+
+* Context-aware responses using **Mistral-7B-Instruct** via **llama-cpp**.
+* Emotion detection via **GoEmotions** BERT-based classifier.
+* Response tone adapts to detected emotions (e.g., supportive if sadness is detected).
+* Built on **FastAPI** with async support and concurrency.
+* Conversation memory using `deque` to maintain history.
+
+### 🎧 Text-to-Speech (TTS)
+
+* Voice synthesis using **Jenny TTS** (`coqui.ai`).
+* Cleaned, emotion-filtered responses passed to the TTS engine.
+* Non-blocking audio playback using `sounddevice`.
+* Adjustable sample rate for audio fidelity.
+
+### 🔗 Controller Module
+
+* Centralized startup and monitoring of STT, LLM, and TTS modules.
+* Uses Python subprocess and environment isolation.
+* Logs output and manages crash recovery.
+* Toggling between voice and text mode supported via API.
+
+---
+
+## Installation
+
+### 1. Prerequisites
+
+* Python 3.8 or higher
+* (Optional) GPU support for better performance
+
+### 2. Dependency Installation
+
+```bash
 pip install -r requirements.txt
+```
 
+### 3. Model Setup
 
-3️⃣ Model Setup
-- Download and place the Mistral-7B-Instruct model in the designated directory.
-- Ensure Whisper AI and Resemblyzer are installed.
-- Verify Jenny TTS model availability.
-4️⃣ Configuration
-Modify the environment paths in the controller script:
+* Place **Mistral-7B-Instruct GGUF model** in the correct directory.
+* Ensure **Whisper**, **Jenny TTS**, and **Resemblyzer** are installed and working.
+* Internet connection required to fetch emotion labels for GoEmotions.
+
+### 4. Configuration
+
+Update paths in `assistant_controller.py`:
+
+```python
 STT_ENV = "path_to_stt_venv/bin/python"
 TEXT_GEN_ENV = "path_to_text_gen_venv/bin/python"
 TTS_ENV = "path_to_tts_venv/bin/python"
+```
 
+---
 
+## Usage
 
-Usage
-🚀 Launching the AI Assistant
-Start all modules with:
+### 🚀 Running the Full Suite
+
+```bash
 python assistant_controller.py
+```
 
+This initializes:
 
-This will:
-- Initialize STT to process voice input.
-- Trigger LLM for response generation.
-- Convert AI replies to speech via TTS.
-- Monitor and synchronize processes.
-📡 API Endpoints
-- /transcript?mode=plain – Fetch a clean transcription.
-- /transcript?mode=speaker – Retrieve transcripts with speaker attribution.
-- /respond – Generate AI response from user input.
-- /toggle_mode – Switch between voice and text interaction modes.
-- /status – View system diagnostics (active threads, memory usage, etc.).
+* STT (real-time voice transcription)
+* LLM (response generation)
+* TTS (voice synthesis)
+* Controller (synchronization)
 
-Technologies Used
-The system is built using state-of-the-art machine learning and audio processing libraries:
-- Python 3.8+
-- Flask (API framework)
-- Torch & Transformers (LLM processing)
-- LlamaCpp (Efficient model execution)
-- Jenny TTS (Speech synthesis)
-- Resemblyzer (Speaker identification)
-- Whisper AI (Speech-to-text)
-- NumPy (Audio processing)
-- SoundDevice (Real-time audio handling)
-- Subprocess & Threading (Parallel execution)
+### 📡 API Endpoints (via FastAPI)
 
-Contributing
-We welcome contributions! You can:
-- Submit pull requests for enhancements or bug fixes.
-- Open issues to report bugs or suggest improvements.
-- Help optimize model integration for better AI performance.
+| Endpoint                   | Description                                         |
+| -------------------------- | --------------------------------------------------- |
+| `/respond`                 | Generate AI response from text or last spoken input |
+| `/toggle_mode`             | Toggle between voice and text input modes           |
+| `/transcript?mode=plain`   | Get raw transcripts                                 |
+| `/transcript?mode=speaker` | Get transcripts with speaker attribution            |
+| `/`                        | Confirm server status                               |
 
-License
-This project is licensed under the MIT License. See LICENSE for more details.
+---
+
+## Technologies Used
+
+* **Python 3.8+**
+* **FastAPI** (API backend)
+* **Torch, Transformers** (emotion classification)
+* **llama-cpp-python** (Mistral LLM)
+* **Jenny TTS** (TTS synthesis)
+* **FasterWhisper** (real-time STT)
+* **Resemblyzer** (speaker identification)
+* **NumPy**, **SoundDevice** (audio handling)
+* **Concurrent.futures**, **Threading**, **Subprocess** (parallel execution)
+
+---
+
+## Contributing
+
+We welcome contributions:
+
+* Fork the repository and submit PRs for features or bug fixes.
+* Report bugs or suggest enhancements via GitHub Issues.
+* Help optimize model integration or extend functionality.
+
+---
+
+## License
+
+This project is licensed under the **MIT License**. See the `LICENSE` file for details.
