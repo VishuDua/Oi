@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+numpy
+sounddevice
+torch
+scikit-learn
+resemblyzer
+faster-whisper
+psutil
+scipy

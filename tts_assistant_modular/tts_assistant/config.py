@@ -1,0 +1,5 @@
+STT_URL = "http://127.0.0.1:9575/transcript?mode=plain"
+AI_URL = "http://172.27.148.150:8989/respond"
+DEFAULT_SAMPLE_RATE = 56050
+TIMEOUT_DURATION = 5
+MAX_RETRIES = 3
