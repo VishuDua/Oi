@@ -1,0 +1,1 @@
+Place your female_avatar.glb 3D model file here (e.g., a woman with hair). Rename it to female_avatar.glb.
