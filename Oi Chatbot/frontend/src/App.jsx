@@ -31,9 +31,9 @@ export default function App() {
       <ParticlesBackground />
       <div className="relative z-10 flex flex-col flex-1">
         {/* Navbar */}
-        <nav className={`fixed top-0 left-0 w-full 
-            \${theme === "light" ? "bg-amber-200 bg-opacity-80" : "bg-gray-900 bg-opacity-90"} 
-            backdrop-blur-md px-8 py-4 flex items-center justify-between z-20`}>
+        <nav className={`fixed top-0 left-0 w-full ${
+            theme === "light" ? "bg-amber-200 bg-opacity-80" : "bg-gray-900 bg-opacity-90"
+          } backdrop-blur-md px-8 py-4 flex items-center justify-between z-20`}>
           {/* Animated Brand */}
           <motion.div
             className="text-2xl font-bold text-gray-800 dark:text-white tracking-wider uppercase cursor-pointer"
@@ -106,7 +106,6 @@ export default function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/chat" element={<ChatPage />} />
-          <Route path="/meeting" element={<MeetingPage />} />
               <Route path="/meeting" element={<MeetingPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/reminders" element={<RemindersPage />} />

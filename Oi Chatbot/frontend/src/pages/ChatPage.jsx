@@ -1,83 +1,120 @@
 import React, { useState, useEffect, useRef } from "react";
+import api from "../services/api";
 import "./ChatPage.css";
 
 export default function ChatPage() {
-  // ← Update this to match your current Ngrok URL (no trailing slash)
-  const BASE_URL = "https://a1b2-xxx-yyy-zzz.ngrok-free.app";
-
-  // Holds all lines returned by GET /transcript?mode=plain
-  const [transcripts, setTranscripts] = useState([]);
-
-  // Are we currently polling? Controls button label and style
+  const [messages, setMessages] = useState([]);
+  const [inputText, setInputText] = useState("");
   const [isListening, setIsListening] = useState(false);
-  const intervalRef = useRef(null);
+  const [mode, setMode] = useState("text"); // "text" or "voice"
+  const wsRef = useRef(null);
+  const chatWindowRef = useRef(null);
 
-  // Fetch the plain‐text transcript array from the backend
-  const fetchPlainTranscripts = async () => {
-    try {
-      const res = await fetch(`${BASE_URL}/transcript?mode=plain`);
-      if (!res.ok) {
-        console.error("Fetch returned HTTP", res.status);
-        return;
-      }
-      const data = await res.json();
-      // 'data' is an array of strings, e.g. ["Hello world", "Next line"]
-      setTranscripts(data);
-    } catch (err) {
-      console.error("Error fetching /transcript?mode=plain:", err);
-    }
-  };
-
-  // Start polling every 2 seconds
-  const startListening = () => {
-    setIsListening(true);
-    fetchPlainTranscripts(); // immediate first fetch
-    intervalRef.current = setInterval(fetchPlainTranscripts, 2000);
-  };
-
-  // Stop polling
-  const stopListening = () => {
-    setIsListening(false);
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  };
-
-  // Cleanup if the component unmounts
+  // Handle WebSocket connection for real-time speech transcription
   useEffect(() => {
+    if (isListening && mode === "voice") {
+      wsRef.current = api.connectSpeechWebSocket((data) => {
+        if (data.text) {
+          handleNewMessage(data.text);
+        }
+      });
+    }
+
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
-  }, []);
+  }, [isListening, mode]);
+
+  // Scroll chat window to bottom when new messages arrive
+  useEffect(() => {
+    if (chatWindowRef.current) {
+      chatWindowRef.current.scrollTop = chatWindowRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleNewMessage = async (text) => {
+    try {
+      const response = await api.getResponse(text);
+      if (response.response) {
+        setMessages(prev => [...prev, 
+          { type: 'user', text },
+          { type: 'bot', text: response.response }
+        ]);
+      }
+    } catch (error) {
+      console.error('Error getting response:', error);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!inputText.trim()) return;
+
+    await handleNewMessage(inputText);
+    setInputText("");
+  };
+
+  const toggleMode = async () => {
+    try {
+      const response = await api.toggleMode();
+      setMode(response.mode);
+      setIsListening(false);
+    } catch (error) {
+      console.error('Error toggling mode:', error);
+    }
+  };
 
   return (
     <div className="chat-container">
-      {/* ==== Chat Transcript Window ==== */}
-      <div className="chat-window">
-        {transcripts.length === 0 ? (
-          <div className="no-lines">
-            {isListening
-              ? "Listening… no speech detected yet."
-              : "Click ▶️ to start listening."}
+      {/* Chat Window */}
+      <div className="chat-window" ref={chatWindowRef}>
+        {messages.length === 0 ? (
+          <div className="no-messages">
+            {mode === "voice" 
+              ? "Click ▶️ to start voice chat"
+              : "Type a message to start chatting"}
           </div>
         ) : (
-          transcripts.map((line, idx) => (
-            <div key={idx} className="chat-line">
-              {line}
+          messages.map((msg, idx) => (
+            <div key={idx} className={`message ${msg.type}`}>
+              <div className="message-content">{msg.text}</div>
             </div>
           ))
         )}
       </div>
 
-      {/* ==== Mic Button ==== */}
-      <div className="mic-wrapper">
+      {/* Controls */}
+      <div className="chat-controls">
         <button
-          onClick={isListening ? stopListening : startListening}
-          className={`mic-button ${isListening ? "recording" : ""}`}
+          onClick={toggleMode}
+          className="mode-toggle"
         >
-          {isListening ? "⏹ Stop" : "▶️ Start"}
+          {mode === "voice" ? "🎤 Voice Mode" : "⌨️ Text Mode"}
         </button>
+
+        {mode === "voice" ? (
+          <button
+            onClick={() => setIsListening(!isListening)}
+            className={`mic-button ${isListening ? "recording" : ""}`}
+          >
+            {isListening ? "⏹ Stop" : "▶️ Start"}
+          </button>
+        ) : (
+          <form onSubmit={handleSubmit} className="text-input-form">
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="Type your message..."
+              className="text-input"
+            />
+            <button type="submit" className="send-button">
+              Send
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
